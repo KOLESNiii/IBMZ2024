@@ -4,6 +4,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import rasterio
 
+SEG_HYPER_PARAMS = {
+    "kernel_size" : [],
+    "threshold_factor" : []
+}
+
 
 class imageBundle:
     def __init__(self, img, year, coords):
@@ -29,6 +34,43 @@ class imageBundle:
         ndvi = self.toNdvi()  # Get the NDVI array
         ndvi_flat = ndvi.flatten()  # Flatten the NDVI array to 1D
         return ndvi_flat  # Return the flattened NDVI values
+    
+    def greyScaleSegment(self):
+        """Performs image segmentation and returns monochrome heat map"""
+        gray = opencv.cvtColor(self.img, opencv.COLOR_BGR2GRAY)
+        _, thresh = opencv.threshold(gray, 0, 255, opencv.THRESH_BINARY_INV + opencv.THRESH_OTSU)
+
+        # noise removal
+        kernel = np.ones((10, 10), np.uint8)
+        opening = opencv.morphologyEx(thresh, opencv.MORPH_OPEN, kernel, iterations = 2)
+        
+        # sure background area
+        sure_bg = opencv.dilate(opening, kernel, iterations=3)
+        
+        # Finding sure foreground area
+        dist_transform = opencv.distanceTransform(opening, opencv.DIST_L2,5)
+        _, sure_fg = opencv.threshold(dist_transform, 0.03 * dist_transform.max(), 255, 0)
+        
+        # Finding unknown region
+        sure_fg = np.uint8(sure_fg)
+        unknown = opencv.subtract(sure_bg, sure_fg)
+
+        # Marker labelling
+        _, markers = opencv.connectedComponents(sure_fg)
+        
+        # Add one to all labels so that sure background is not 0, but 1
+        markers = markers + 1
+        
+        # Now, mark the region of unknown with zero
+        markers[unknown == 255] = 0
+
+        markers = opencv.watershed(self.img,markers)
+        self.img[markers == -1] = [255, 0, 0]
+
+        mask = np.zeros_like(gray)
+        mask[markers > 1] = 255
+        
+        return mask
 
     def display(self):
         """Method to display the original image and NDVI."""
@@ -39,15 +81,30 @@ class imageBundle:
 
         plt.figure(figsize=(10, 5))
         
-        plt.subplot(1, 2, 1)
+        plt.subplot(1, 3, 1)
         plt.imshow(self.img, cmap='gray')
         plt.title(f'Original Grayscale Image ({self.year})')
         plt.axis('off')
 
-        plt.subplot(1, 2, 2)
+        plt.subplot(1, 3, 2)
         plt.imshow(ndvi_display, cmap='hot')
         plt.title('Mapped NDVI')
+        plt.axis('off')
+        
+        plt.subplot(1, 3, 3)
+        plt.imshow(self.greyScaleSegment(), cmap='hot')
+        plt.title('Monochrome segmentation')
         plt.axis('off')
 
         plt.colorbar()
         plt.show()
+
+if __name__ == "__main__":
+    img = opencv.imread('images/testImage1-amazon.jpeg')
+    imgObj = imageBundle(img, 2024, (0, 0))
+    #imgObj.display()
+    #'''
+    opencv.imshow("Greyscale segmentation", imgObj.greyScaleSegment())
+    opencv.waitKey(0)
+    opencv.destroyAllWindows()
+    #'''
