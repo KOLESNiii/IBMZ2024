@@ -1,13 +1,15 @@
 import requests
 from math import radians, cos, sin, sqrt, atan2
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, wait
 
-import math
+from segmentsplit import get_all_grids
 #Secrets
 client_id = '9b40331a-7b0e-49cd-ab64-9c908c74e538'
 client_secret = 'lu7DmSlKKu8FvVPEry7tPK4DTIJt2dlQ'
 
-RESOLUTION = 25
+RESOLUTION = 35
+sizeInKM = ((2500 * RESOLUTION) // 10000) * 10 - 2
+actualResolution = sizeInKM * 1000 / 2500
 
 def getNewToken():
     token_url = 'https://services.sentinel-hub.com/auth/realms/main/protocol/openid-connect/token'
@@ -47,6 +49,7 @@ def getDistanceBetweenCoords(coords):
     return distance
 
 def save_photo(photo, filename):
+    print("Saving photo")
     if photo:
         with open(filename, "wb") as f:
             f.write(photo)
@@ -81,8 +84,8 @@ def post_request(headers, url, imageNum :int, bbox : list[int], year : int) -> N
                 ]
             },
             "output": {
-                "width": RESOLUTION * bbox_width,
-                "height": RESOLUTION * bbox_height,
+                "width": actualResolution * bbox_width,
+                "height": actualResolution * bbox_height,
                 "responses": [
                 {
                     "identifier": "default",
@@ -96,7 +99,12 @@ def post_request(headers, url, imageNum :int, bbox : list[int], year : int) -> N
             }
 
             response = requests.post(url, headers=headers, json=data)
-            if response.status_code != 200:
+            if response.status_code == 400:
+                print(f"Error 400:  Width: {actualResolution * bbox_width}, Height: {actualResolution * bbox_height}")
+                print(response.content)
+                print(imageNum)
+                print(bbox)
+            elif response.status_code != 200:
                 print(f"Error getting image {imageNum} due to status code {response.status_code}")
                 return headers, url, imageNum, bbox, year
             else:
@@ -113,27 +121,24 @@ def post_request(headers, url, imageNum :int, bbox : list[int], year : int) -> N
 def download_images(year):
     token = getNewToken()
     if not token:
+        print("Error getting token")
         return
     url = "https://services.sentinel-hub.com/api/v1/process"
     headers = {
     "Content-Type": "application/json",
     "Authorization": f"Bearer {token}"
     }
-
+    print("Starting download")
     with ThreadPoolExecutor(max_workers=10) as executor:
-        future_to_url = {executor.submit(post_request, headers, url, n, bbox, year): (n,bbox) for n, bbox in get_all_grids()}
-        bad_requests = []
-        for future in as_completed(future_to_url):
-            url = future_to_url[future]
-            try:
-                data = future.result()
-                if data != True:
-                    bad_requests.append(data)
-            except Exception as exc:
-                print(f"Error getting image {url}: {exc}")
-            else:
-                print(f"Image {url} downloaded")
+        print("Starting threads")
+        futures = [executor.submit(post_request, headers, url, n, bbox, year) for n, bbox in get_all_grids(sizeInKM)]
+        wait(futures)
+        results = [future.result() for future in futures]
+        print(results)
+        bad_requests = [result for result in results if result != True]
+        print("Finished threads")
+        print(f"Bad requests: {len(bad_requests)}")
 
-    
-download_images(2024)
-token = getNewToken()
+#download_images(2024)
+print("Running")
+print(list(get_all_grids(sizeInKM))[24])
