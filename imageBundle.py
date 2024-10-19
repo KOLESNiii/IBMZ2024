@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import rasterio
 
 SEG_HYPER_PARAMS = {
-    "kernel_size" : [],
-    "threshold_factor" : []
+    "kernel_size" : {"desert" : (10, 10), "rainforest" : ()},
+    "threshold_factor" : {"desert" : 0.03, "rainforest" : None}
 }
 
 
@@ -100,7 +100,7 @@ class imageBundle:
         plt.show()
 
 if __name__ == "__main__":
-    img = opencv.imread('images/testImage1-amazon.jpeg')
+    img = opencv.imread('images/testImage6-europe.jpeg')
     imgObj = imageBundle(img, 2024, (0, 0))
     #imgObj.display()
     #'''
