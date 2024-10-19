@@ -47,8 +47,8 @@ def get_nth_grid(n, side_length_km = 85):
             if count == n:
                 return [lon, lat, lon + lon_step , lat + lat_step]
 
+
             lon += lon_step
             count += 1
         # Move to the next box in latitude
         lat += lat_step
-
