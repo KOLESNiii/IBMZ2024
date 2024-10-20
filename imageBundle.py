@@ -37,40 +37,60 @@ class imageBundle:
     
     def greyScaleSegment(self):
         """Performs image segmentation and returns monochrome heat map"""
-        gray = opencv.cvtColor(self.img, opencv.COLOR_BGR2GRAY)
-        _, thresh = opencv.threshold(gray, 0, 255, opencv.THRESH_BINARY_INV + opencv.THRESH_OTSU)
+        hsv = opencv.cvtColor(self.img, opencv.COLOR_BGR2HSV)
+        
+        # Define HSV range for green
+        lower_green = np.array([10, 30, 30])
+        upper_green = np.array([105, 255, 255])
 
-        # noise removal
-        kernel = np.ones((10, 10), np.uint8)
-        opening = opencv.morphologyEx(thresh, opencv.MORPH_OPEN, kernel, iterations = 2)
+        green_mask = opencv.inRange(hsv, lower_green, upper_green)
         
-        # sure background area
-        sure_bg = opencv.dilate(opening, kernel, iterations=3)
+        green_area_count = np.count_nonzero(green_mask)
         
-        # Finding sure foreground area
-        dist_transform = opencv.distanceTransform(opening, opencv.DIST_L2,5)
-        _, sure_fg = opencv.threshold(dist_transform, 0.03 * dist_transform.max(), 255, 0)
+        # Apply the mask to the original image (focus only on green and blue regions)
+        filtered_img = opencv.bitwise_and(self.img, self.img, mask=green_mask)
         
-        # Finding unknown region
-        sure_fg = np.uint8(sure_fg)
-        unknown = opencv.subtract(sure_bg, sure_fg)
+        min_green_area_threshold = 3700
+        
+        if green_area_count > min_green_area_threshold:
+        #if True:
+            gray = opencv.cvtColor(filtered_img, opencv.COLOR_BGR2GRAY)
+            
+            _, thresh = opencv.threshold(gray, 0, 255, opencv.THRESH_BINARY_INV + opencv.THRESH_OTSU)
 
-        # Marker labelling
-        _, markers = opencv.connectedComponents(sure_fg)
-        
-        # Add one to all labels so that sure background is not 0, but 1
-        markers = markers + 1
-        
-        # Now, mark the region of unknown with zero
-        markers[unknown == 255] = 0
+            # noise removal
+            kernel = np.ones((10, 10), np.uint8)
+            opening = opencv.morphologyEx(thresh, opencv.MORPH_OPEN, kernel, iterations = 2)
+            
+            # sure background area
+            sure_bg = opencv.dilate(opening, kernel, iterations=3)
+            
+            # Finding sure foreground area
+            dist_transform = opencv.distanceTransform(opening, opencv.DIST_L2, 5)
+            _, sure_fg = opencv.threshold(dist_transform, 0.03 * dist_transform.max(), 255, 0)
+            
+            # Finding unknown region
+            sure_fg = np.uint8(sure_fg)
+            unknown = opencv.subtract(sure_bg, sure_fg)
 
-        markers = opencv.watershed(self.img,markers)
-        self.img[markers == -1] = [255, 0, 0]
+            # Marker labelling
+            _, markers = opencv.connectedComponents(sure_fg)
+            
+            # Add one to all labels so that sure background is not 0, but 1
+            markers = markers + 1
+            
+            # Now, mark the region of unknown with zero
+            markers[unknown == 255] = 0
 
-        mask = np.zeros_like(gray)
-        mask[markers > 1] = 255
-        
-        return mask
+            markers = opencv.watershed(self.img, markers)
+            self.img[markers == -1] = [255, 0, 0]
+
+            mask = np.zeros_like(gray)
+            mask[markers > 1] = 255
+            
+            return opencv.bitwise_not(mask)
+        else:
+            return np.zeros_like(self.img)
 
     def display(self):
         """Method to display the original image and NDVI."""
@@ -100,11 +120,22 @@ class imageBundle:
         plt.show()
 
 if __name__ == "__main__":
-    img = opencv.imread('images/testImage6-europe.jpeg')
+    img = opencv.imread('actualImages/2024img6808.jpeg')
+    #img = opencv.imread('images/testImage4-sahel.jpeg')
     imgObj = imageBundle(img, 2024, (0, 0))
-    #imgObj.display()
+    
     #'''
-    opencv.imshow("Greyscale segmentation", imgObj.greyScaleSegment())
-    opencv.waitKey(0)
-    opencv.destroyAllWindows()
+    plt.subplot(1, 2, 1)
+    #plt.imshow(opencv.split(img)[1])
+    plt.imshow(img)
+    
+    plt.subplot(1, 2, 2)
+    plt.imshow(imgObj.greyScaleSegment())
+    
+    plt.show()
+    
+    plt.imshow(imgObj.greyScaleSegment())
+    plt.show()
     #'''
+    
+    #imgObj.greyScaleSegment()
