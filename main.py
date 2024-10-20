@@ -1,2 +1,10 @@
+from lawrence import batchImages
+import imageBundle
+import segmentsplit
+import classification
+import timk
+
 if __name__ == "__main__":
-    print("Hello, World!")
+    for img in batchImages("images"):
+        
+
