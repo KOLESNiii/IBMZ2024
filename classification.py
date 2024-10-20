@@ -16,7 +16,6 @@ def classify_image(image):
     green_range = ((35, 20, 20), (85, 255, 255))  # Rainforest (green, with lower brightness threshold)
     yellow_range = ((15, 40, 40), (35, 255, 255))  # Desert (yellow-tan, more sensitive)
     blue_range = ((85, 30, 30), (135, 255, 255))  # Ocean (expanded blue range)
-    brown_gray_range = ((0, 0, 30), (25, 100, 200))  # City (brown-gray tones)
 
     # Function to calculate percentage of pixels in a given color range
     def calculate_color_percentage(hsv_img, lower_bound, upper_bound):
@@ -29,7 +28,6 @@ def classify_image(image):
     green_percentage = calculate_color_percentage(hsv_image, *green_range)
     yellow_percentage = calculate_color_percentage(hsv_image, *yellow_range)
     blue_percentage = calculate_color_percentage(hsv_image, *blue_range)
-    brown_gray_percentage = calculate_color_percentage(hsv_image, *brown_gray_range)
 
     # Texture Analysis using Local Binary Pattern (LBP)
     gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -43,13 +41,11 @@ def classify_image(image):
     # Threshold for texture classification (adjust based on texture data)
     if hist[0] > 0.5:  # Very smooth texture likely indicates desert
         texture_classification = 'desert'
-    elif hist[8] > 0.2:  # More complex texture often suggests city or forest
-        texture_classification = 'city' if brown_gray_percentage > green_percentage else 'rainforest'
     else:
         texture_classification = 'unknown'
 
     # Print out percentages for debugging
-    print(f"Green: {green_percentage:.2f}%, Yellow: {yellow_percentage:.2f}%, Blue: {blue_percentage:.2f}%, Brown/Gray: {brown_gray_percentage:.2f}%")
+    print(f"Green: {green_percentage:.2f}%, Yellow: {yellow_percentage:.2f}%, Blue: {blue_percentage:.2f}%")
     print(f"Texture Classification: {texture_classification}")
 
     # Combine color and texture classification
@@ -59,8 +55,6 @@ def classify_image(image):
         return 'desert'
     elif blue_percentage > 20:
         return 'ocean'
-    elif brown_gray_percentage > 20:
-        return 'city'
     else:
         return texture_classification  # Fallback to texture classification if color is unclear
 
