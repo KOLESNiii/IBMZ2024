@@ -1,5 +1,6 @@
 /venv/
-/actualImages/
+!/actualImages/
+/actualImages/*.jpeg
 !/actualImages/2024img6???.jpeg
 !/actualImages/NDVI2024img6???.jpeg
 !/actualImages/2024img9???.jpeg
