@@ -40,18 +40,10 @@ class imageBundle:
         hsv = opencv.cvtColor(self.img, opencv.COLOR_BGR2HSV)
         
         # Define HSV range for green
-        lower_green = np.array([15, 35, 35])
-        upper_green = np.array([85, 255, 255])
-
-        # Define HSV range for blue
-        #lower_blue = np.array([90, 50, 50])
-        #upper_blue = np.array([130, 255, 255])
+        lower_green = np.array([10, 30, 30])
+        upper_green = np.array([105, 255, 255])
 
         green_mask = opencv.inRange(hsv, lower_green, upper_green)
-        #blue_mask = opencv.inRange(hsv, lower_blue, upper_blue)
-        
-        # Combine the masks to keep only green and blue regions
-        #combined_mask = opencv.bitwise_or(green_mask, blue_mask)
         
         green_area_count = np.count_nonzero(green_mask)
         
@@ -62,9 +54,8 @@ class imageBundle:
         
         if green_area_count > min_green_area_threshold:
         #if True:
-            gray = opencv.cvtColor(self.img, opencv.COLOR_BGR2GRAY)
+            gray = opencv.cvtColor(filtered_img, opencv.COLOR_BGR2GRAY)
             
-            #_, green, _ = opencv.split(self.img)
             _, thresh = opencv.threshold(gray, 0, 255, opencv.THRESH_BINARY_INV + opencv.THRESH_OTSU)
 
             # noise removal
@@ -75,7 +66,7 @@ class imageBundle:
             sure_bg = opencv.dilate(opening, kernel, iterations=3)
             
             # Finding sure foreground area
-            dist_transform = opencv.distanceTransform(opening, opencv.DIST_L2,5)
+            dist_transform = opencv.distanceTransform(opening, opencv.DIST_L2, 5)
             _, sure_fg = opencv.threshold(dist_transform, 0.03 * dist_transform.max(), 255, 0)
             
             # Finding unknown region
@@ -91,15 +82,15 @@ class imageBundle:
             # Now, mark the region of unknown with zero
             markers[unknown == 255] = 0
 
-            markers = opencv.watershed(self.img,markers)
+            markers = opencv.watershed(self.img, markers)
             self.img[markers == -1] = [255, 0, 0]
 
             mask = np.zeros_like(gray)
             mask[markers > 1] = 255
             
-            return mask
+            return opencv.bitwise_not(mask)
         else:
-            return np.zeros_like(img)
+            return np.zeros_like(self.img)
 
     def display(self):
         """Method to display the original image and NDVI."""
@@ -129,10 +120,11 @@ class imageBundle:
         plt.show()
 
 if __name__ == "__main__":
-    img = opencv.imread('actualImages/2024img6211.jpeg')
+    img = opencv.imread('actualImages/2024img6808.jpeg')
     #img = opencv.imread('images/testImage4-sahel.jpeg')
     imgObj = imageBundle(img, 2024, (0, 0))
     
+    #'''
     plt.subplot(1, 2, 1)
     #plt.imshow(opencv.split(img)[1])
     plt.imshow(img)
@@ -144,3 +136,6 @@ if __name__ == "__main__":
     
     plt.imshow(imgObj.greyScaleSegment())
     plt.show()
+    #'''
+    
+    #imgObj.greyScaleSegment()
