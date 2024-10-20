@@ -1,16 +1,25 @@
 import requests
 from math import radians, cos, sin, sqrt, atan2
 from concurrent.futures import ThreadPoolExecutor, as_completed, wait
+from time import sleep
+import logging
+import geopandas as gpd
+import matplotlib.pyplot as plt
+from shapely.geometry import box
+import datetime
 
-from segmentsplit import get_all_grids
+from segmentsplit import get_grids
+
 #Secrets
-client_id = '9b40331a-7b0e-49cd-ab64-9c908c74e538'
-client_secret = 'lu7DmSlKKu8FvVPEry7tPK4DTIJt2dlQ'
+client_id = '30fa2c14-8e3b-42bf-a6e3-85fc5dadef2c'
+client_secret = 'swd5WcVv4bPCJfF2OvXLoT5b5gNd6JuT'
 
-RESOLUTION = 35
-sizeInKM = ((2500 * RESOLUTION) // 10000) * 10 - 2
+RESOLUTION = 100
+sizeInKM = ((2500 * RESOLUTION) // 10000) * 9
 actualResolution = sizeInKM * 1000 / 2500
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 def getNewToken():
     token_url = 'https://services.sentinel-hub.com/auth/realms/main/protocol/openid-connect/token'
     token_header = {'content-type': 'application/x-www-form-urlencoded'}
@@ -26,10 +35,10 @@ def getNewToken():
     return response.json()['access_token']
 
 def getDistanceBetweenCoords(coords):
-    lat1 = coords[0]
-    lon1 = coords[1]
-    lat2 = coords[2]
-    lon2 = coords[3]
+    lon1 = coords[0]
+    lat1 = coords[1]
+    lon2 = coords[2]
+    lat2 = coords[3]
     # approximate radius of earth in km
     R = 6373.0
 
@@ -49,13 +58,13 @@ def getDistanceBetweenCoords(coords):
     return distance
 
 def save_photo(photo, filename):
-    print("Saving photo")
+    logger.info("Saving photo")
     if photo:
         with open(filename, "wb") as f:
             f.write(photo)
-        print("Photo saved")
+        logger.info("Photo saved")
     else:
-        print("No photo to save")
+        logger.warning("No photo to save")
 
 def post_request(headers, url, imageNum :int, bbox : list[int], year : int) -> None:
     bbox_width = getDistanceBetweenCoords([bbox[0], bbox[1], bbox[0], bbox[3]])
@@ -84,8 +93,8 @@ def post_request(headers, url, imageNum :int, bbox : list[int], year : int) -> N
                 ]
             },
             "output": {
-                "width": actualResolution * bbox_width,
-                "height": actualResolution * bbox_height,
+                "width": bbox_width * 1000 / actualResolution,
+                "height": bbox_height * 1000 / actualResolution,
                 "responses": [
                 {
                     "identifier": "default",
@@ -100,45 +109,62 @@ def post_request(headers, url, imageNum :int, bbox : list[int], year : int) -> N
 
             response = requests.post(url, headers=headers, json=data)
             if response.status_code == 400:
-                print(f"Error 400:  Width: {actualResolution * bbox_width}, Height: {actualResolution * bbox_height}")
-                print(response.content)
-                print(imageNum)
-                print(bbox)
+                logger.error(f"Error 400:  Width: {actualResolution * bbox_width}, Height: {actualResolution * bbox_height}")
+                logger.debug(response.content)
+                logger.debug(imageNum)
+                logger.debug(bbox)
+            elif response.status_code == 429:
+                logger.info("Rate limit exceeded")
+                sleep(1)
+                return headers, url, imageNum, bbox, year
+            elif response.status_code == 403:
+                logger.error("Error 403: Forbidden")
+                logger.debug(response.content)
+                raise PermissionError(f"Error 403 forbidden on item {imageNum}")
+                return headers, url, imageNum, bbox, year
             elif response.status_code != 200:
-                print(f"Error getting image {imageNum} due to status code {response.status_code}")
+                logger.error(f"Error getting image {imageNum} due to status code {response.status_code}")
+                logger.debug(response.content)
                 return headers, url, imageNum, bbox, year
             else:
                 if evalscript == colour_evalscript:
-                    save_photo(response.content, f"{year}img{imageNum}.jpeg")
+                    save_photo(response.content, f"actualImagesLowRes/{year}img{imageNum}.jpeg")
                 else:
-                    save_photo(response.content, f"NDVI{year}img{imageNum}.jpeg")
+                    save_photo(response.content, f"actualImagesLowRes/NDVI{year}img{imageNum}.jpeg")
     except Exception as e:
-        print(f"Error getting image {imageNum}")
-        #print(e)
+        logger.error(f"Error getting image {imageNum}")
+        logger.error(e)
         return headers, url, imageNum, bbox, year
     return True
 
 def download_images(year):
     token = getNewToken()
     if not token:
-        print("Error getting token")
+        logger.error("Error getting token")
         return
     url = "https://services.sentinel-hub.com/api/v1/process"
     headers = {
     "Content-Type": "application/json",
     "Authorization": f"Bearer {token}"
     }
-    print("Starting download")
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        print("Starting threads")
-        futures = [executor.submit(post_request, headers, url, n, bbox, year) for n, bbox in get_all_grids(sizeInKM)]
-        wait(futures)
-        results = [future.result() for future in futures]
-        print(results)
-        bad_requests = [result for result in results if result != True]
-        print("Finished threads")
-        print(f"Bad requests: {len(bad_requests)}")
+    num = 25010
+    count = 0 
+    for i in range(13, 20):
+        first = i * 500
+        last = (i + 1) * 500 - 1
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            logger.info("Starting threads")
+            futures = [executor.submit(post_request, headers, url, n, bbox, year) for n, bbox in get_grids(sizeInKM, first=first, last=last)]
+            wait(futures)
+            results = [future.result() for future in futures]
+            logger.info(results)
+            bad_requests = [result for result in results if result != True]
+            logger.info("Finished threads")
+            logger.warning(f"Bad requests: {len(bad_requests)}")
+            logger.warning(f"Bad requests: {[result[2] for result in bad_requests]}")
+            with open(f"bad_requests_{year}.txt", "a") as f:
+                f.write(", ".join([str(result[2]) for result in bad_requests]) + ",")
 
-#download_images(2024)
-print("Running")
-print(list(get_all_grids(sizeInKM))[24])
+download_images(2024)
+#logger.info("Running")
+
